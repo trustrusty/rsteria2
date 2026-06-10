@@ -5,10 +5,16 @@
 //! Both features live at the datagram layer:
 //! - **Obfuscation**: outbound packets are XOR-masked + salted; inbound packets
 //!   are unmasked. Disables GSO/GRO so every datagram carries its own salt.
-//! - **Port hopping**: outbound packets are redirected to a rotating port out
-//!   of a configured range, and the *source* address of inbound packets is
-//!   rewritten back to the canonical server address so quinn never perceives a
+//! - **Port hopping**: outbound packets are redirected to a rotating *destination*
+//!   port out of a configured range, and the *source* address of inbound packets
+//!   is rewritten back to the canonical server address so quinn never perceives a
 //!   path change (equivalent to Go's `DisablePathManager: true`).
+//!
+//! Note: unlike Go's `udphop`, which also rebinds a fresh *local* socket on each
+//! hop (rotating the client's source port for NAT-rebinding), this keeps one
+//! local socket and only rotates the destination port. That is sufficient
+//! against a standard server listening on a port range; it just doesn't rotate
+//! the source port.
 
 use std::{
     fmt,
@@ -232,6 +238,7 @@ impl AsyncUdpSocket for ObfsHopSocket {
                         .collect();
 
                     let n = match self.inner.poll_recv(cx, &mut tmp_bufs, &mut tmp_meta[..count]) {
+                        Poll::Ready(Ok(0)) => return Poll::Ready(Ok(0)), // avoid busy-spin
                         Poll::Ready(Ok(n)) => n,
                         other => return other,
                     };

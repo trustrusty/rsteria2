@@ -12,6 +12,14 @@ use crate::{
 /// A connected Hysteria2 client. Cheap to share; open one proxied TCP
 /// connection per [`tcp_connect`](Self::tcp_connect), or a UDP session per
 /// [`udp`](Self::udp).
+///
+/// The client owns the underlying QUIC connection and closes it on drop, so any
+/// [`DuplexStream`] or [`UdpSession`] it produced is invalidated once the client
+/// (its last clone) is dropped — keep the client alive for as long as you use
+/// its streams. The same applies when [`ReconnectableClient`] reconnects or is
+/// invalidated.
+///
+/// [`ReconnectableClient`]: crate::ReconnectableClient
 pub struct HysteriaClient {
     conn: quinn::Connection,
     // Held only to keep the endpoint's background event loop alive for the

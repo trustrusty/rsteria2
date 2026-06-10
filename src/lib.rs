@@ -24,22 +24,19 @@
 //! # Ok(()) }
 //! ```
 
-mod brutal;
 mod client;
 mod config;
+mod congestion;
 mod connect;
-mod endpoint;
 mod error;
-mod obfs;
 mod protocol;
 mod reconnect;
-mod socket;
 mod stream;
-mod tls;
+mod transport;
 mod udp;
 
-pub use brutal::{Brutal, BrutalFactory};
 pub use client::HysteriaClient;
+pub use congestion::{Brutal, BrutalFactory};
 pub use config::{Config, QuicParams};
 pub use connect::connect;
 pub use error::{Error, Result};

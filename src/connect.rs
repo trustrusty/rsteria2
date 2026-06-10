@@ -6,12 +6,9 @@ use std::time::Duration;
 use crate::{
     client::HysteriaClient,
     config::{parse_ports, Config},
-    endpoint::build_endpoint,
     error::{Error, Result},
-    obfs::Salamander,
     protocol::auth_request_padding,
-    socket::HopConfig,
-    tls::{build_client_config, parse_pin},
+    transport::{build_client_config, build_endpoint, parse_pin, HopConfig, Salamander},
 };
 
 /// Hysteria2 auth success HTTP status (intentionally non-standard).

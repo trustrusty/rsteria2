@@ -11,14 +11,19 @@ use quinn::{
     Runtime, TokioRuntime, TransportConfig, VarInt,
 };
 
+pub(crate) mod obfs;
+pub(crate) mod socket;
+pub(crate) mod tls;
+
+pub(crate) use obfs::Salamander;
+pub(crate) use socket::HopConfig;
+pub(crate) use tls::{build_client_config, parse_pin};
+
 use crate::{
-    brutal::SwitchableFactory,
-    config::QuicParams,
-    error::Result,
-    obfs::Salamander,
+    config::QuicParams, congestion::SwitchableFactory, error::Result,
     protocol::MAX_DATAGRAM_FRAME_SIZE,
-    socket::{HopConfig, ObfsHopSocket},
 };
+use socket::ObfsHopSocket;
 
 /// Upload congestion control: a shared Brutal rate plus a flag that hands the
 /// window to BBR (set when the server answers `CC-RX: auto`). `None` = BBR only.

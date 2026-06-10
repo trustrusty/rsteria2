@@ -27,7 +27,7 @@ use quinn::udp::{RecvMeta, Transmit};
 use quinn::{AsyncUdpSocket, UdpPoller};
 use rand::Rng;
 
-use crate::obfs::Salamander;
+use super::obfs::Salamander;
 
 /// Port-hopping parameters.
 #[derive(Clone)]

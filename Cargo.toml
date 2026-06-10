@@ -1,0 +1,27 @@
+[package]
+name = "rsteria2"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "A clean async Rust client for the Hysteria2 proxy protocol, built on quinn."
+keywords = ["hysteria2", "hy2", "quic", "proxy", "async"]
+categories = ["network-programming"]
+repository = "https://github.com/trustrusty/rsteria2"
+
+[dependencies]
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
+quinn-proto = { version = "0.11", default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pki-types = "1"
+webpki-roots = "1"
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+http = "1"
+bytes = "1"
+rand = "0.9"
+tokio = { version = "1", features = ["io-util", "time", "rt", "sync"] }
+thiserror = "2"
+tracing = "0.1"
+blake2 = "0.10"
+sha2 = "0.10"
+rustls-pemfile = "2"

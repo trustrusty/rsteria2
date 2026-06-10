@@ -87,3 +87,14 @@ impl HysteriaClient {
         &self.conn
     }
 }
+
+impl Drop for HysteriaClient {
+    fn drop(&mut self) {
+        // Promptly close the connection (Go's `Close` does `CloseWithError`).
+        // This also unblocks the UDP `receive_loop`, which is parked on
+        // `read_datagram()` holding its own `Connection` clone, so the task and
+        // socket are released instead of lingering until the idle timeout.
+        // `0x100` = HTTP/3 ErrCodeNoError, matching the Go client.
+        self.conn.close(0x100u32.into(), b"");
+    }
+}

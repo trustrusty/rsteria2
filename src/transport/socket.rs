@@ -53,6 +53,9 @@ pub struct ObfsHopSocket {
     /// coming from here so path validation stays happy while we hop ports.
     canonical: SocketAddr,
     write_buf: Mutex<Vec<u8>>,
+    /// Reused receive scratch for the obfuscation path (deobfuscate before
+    /// handing plaintext to quinn), avoiding a per-poll allocation.
+    recv_scratch: Mutex<(Vec<u8>, Vec<RecvMeta>)>,
     _hop_task: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -107,6 +110,7 @@ impl ObfsHopSocket {
             hop_addrs,
             canonical,
             write_buf: Mutex::new(vec![0u8; SCRATCH_DATAGRAM]),
+            recv_scratch: Mutex::new((Vec::new(), Vec::new())),
             _hop_task: hop_task,
         }))
     }
@@ -210,25 +214,33 @@ impl AsyncUdpSocket for ObfsHopSocket {
                 Poll::Ready(Ok(n))
             }
             Some(obfs) => {
-                // Obfuscation: receive into scratch buffers, deobfuscate into
-                // the caller's, dropping any packet that fails to unmask.
+                // Obfuscation: receive into reused scratch buffers, deobfuscate
+                // into the caller's, dropping any packet that fails to unmask.
+                let count = bufs.len();
+                let mut guard = self.recv_scratch.lock().unwrap();
+                let (scratch, tmp_meta) = &mut *guard;
+                if scratch.len() < count * SCRATCH_DATAGRAM {
+                    scratch.resize(count * SCRATCH_DATAGRAM, 0);
+                }
+                if tmp_meta.len() < count {
+                    tmp_meta.resize(count, RecvMeta::default());
+                }
                 loop {
-                    let count = bufs.len();
-                    let mut scratch = vec![0u8; count * SCRATCH_DATAGRAM];
-                    let mut tmp_meta = vec![RecvMeta::default(); count];
-                    let mut tmp_bufs: Vec<IoSliceMut> = scratch
+                    let mut tmp_bufs: Vec<IoSliceMut> = scratch[..count * SCRATCH_DATAGRAM]
                         .chunks_mut(SCRATCH_DATAGRAM)
                         .map(IoSliceMut::new)
                         .collect();
 
-                    let n = match self.inner.poll_recv(cx, &mut tmp_bufs, &mut tmp_meta) {
+                    let n = match self.inner.poll_recv(cx, &mut tmp_bufs, &mut tmp_meta[..count]) {
                         Poll::Ready(Ok(n)) => n,
                         other => return other,
                     };
+                    drop(tmp_bufs); // release the &mut borrow of `scratch`
 
                     let mut out = 0usize;
                     for k in 0..n {
-                        let raw = &tmp_bufs[k][..tmp_meta[k].len];
+                        let raw_end = tmp_meta[k].len;
+                        let raw = &scratch[k * SCRATCH_DATAGRAM..k * SCRATCH_DATAGRAM + raw_end];
                         let plain_len = obfs.deobfuscate(raw, &mut bufs[out]);
                         if plain_len == 0 {
                             continue; // invalid packet — discard

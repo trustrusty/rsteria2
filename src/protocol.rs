@@ -21,7 +21,12 @@ const PADDING_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVW
 /// Random alphanumeric padding of length in `[min, max)` (matches Go `padding.String`).
 fn random_padding(min: usize, max: usize) -> Vec<u8> {
     let mut rng = rand::rng();
-    let n = min + rng.random_range(0..(max - min));
+    // Defensive: an empty/invalid range yields exactly `min` bytes.
+    let n = if max > min {
+        min + rng.random_range(0..(max - min))
+    } else {
+        min
+    };
     (0..n)
         .map(|_| PADDING_CHARS[rng.random_range(0..PADDING_CHARS.len())])
         .collect()

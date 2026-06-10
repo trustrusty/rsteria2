@@ -23,10 +23,15 @@ use crate::{
     protocol::{frag_udp_message, Defragger, UdpMessage, MAX_DATAGRAM_FRAME_SIZE, MAX_UDP_SIZE},
 };
 
+/// Per-session inbound queue depth. Like Go's `udpMessageChanSize`, the queue
+/// is bounded and messages are dropped when full (UDP is lossy by nature), so a
+/// stalled reader can't grow memory without bound.
+const SESSION_CHAN_SIZE: usize = 1024;
+
 /// Routes inbound UDP datagrams to per-session channels.
 pub(crate) struct UdpSessionManager {
     conn: quinn::Connection,
-    sessions: Mutex<HashMap<u32, mpsc::UnboundedSender<UdpMessage>>>,
+    sessions: Mutex<HashMap<u32, mpsc::Sender<UdpMessage>>>,
     next_id: AtomicU32,
 }
 
@@ -46,7 +51,7 @@ impl UdpSessionManager {
     /// Open a new UDP session with a fresh Session ID.
     pub(crate) fn new_session(self: &Arc<Self>) -> UdpSession {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel(SESSION_CHAN_SIZE);
         self.sessions.lock().unwrap().insert(id, tx);
         UdpSession {
             id,
@@ -60,9 +65,9 @@ impl UdpSessionManager {
     fn dispatch(&self, msg: UdpMessage) {
         let sessions = self.sessions.lock().unwrap();
         if let Some(tx) = sessions.get(&msg.session_id) {
-            // Unbounded: a slow reader grows memory rather than dropping, but a
-            // dropped receiver just means the send fails harmlessly.
-            let _ = tx.send(msg);
+            // Non-blocking: drop the datagram if the session queue is full or
+            // its receiver is gone (Go's `default:` case in udp.go).
+            let _ = tx.try_send(msg);
         }
         // Unknown session — ignore (Go does the same).
     }
@@ -94,7 +99,7 @@ async fn receive_loop(conn: quinn::Connection, mgr: Weak<UdpSessionManager>) {
 pub struct UdpSession {
     id: u32,
     conn: quinn::Connection,
-    rx: mpsc::UnboundedReceiver<UdpMessage>,
+    rx: mpsc::Receiver<UdpMessage>,
     defrag: Defragger,
     mgr: Weak<UdpSessionManager>,
 }

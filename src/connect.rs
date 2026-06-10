@@ -15,6 +15,8 @@ use crate::{
 const STATUS_AUTH_OK: u16 = 233;
 /// Default port-hop interval when the config leaves it at 0 (Go: 30s).
 const DEFAULT_HOP_INTERVAL_SECS: u64 = 30;
+/// Minimum hop interval (Go rejects anything below this).
+const MIN_HOP_INTERVAL_SECS: u64 = 5;
 
 /// Outcome of the auth handshake (Go `AuthResponse`).
 struct AuthResponse {
@@ -130,7 +132,9 @@ async fn resolve_endpoint(config: &Config) -> Result<(SocketAddr, Option<HopConf
     let min = if config.hop_interval_min_secs == 0 {
         DEFAULT_HOP_INTERVAL_SECS
     } else {
-        config.hop_interval_min_secs
+        // Go enforces a 5s floor: the server needs time to acknowledge the new
+        // path, so hopping faster than that causes packet loss.
+        config.hop_interval_min_secs.max(MIN_HOP_INTERVAL_SECS)
     };
     let max = if config.hop_interval_max_secs == 0 {
         min
